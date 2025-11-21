@@ -1,17 +1,18 @@
 <#
 .SYNOPSIS
     VNTextMiner Auto-Installer
-    Downloads the app, dictionaries, and dependencies, then creates a shortcut.
+    Downloads app/dicts, installs dependencies, and creates Desktop + Start Menu shortcuts.
 #>
 
 $ErrorActionPreference = "Stop"
 $appName = "VNTextMiner"
 $installDir = "$env:LOCALAPPDATA\$appName"
 $desktop = [Environment]::GetFolderPath("Desktop")
+$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 
 # --- CONFIGURATION URLS ---
 $urlAppZip   = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/VNTextMiner_v1.0.zip"
-$urlMeCabDic = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/NMeCab-dic.7z" 
+$urlMeCabDic = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/NMeCab-dic.zip" 
 $urlJitendex = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/jitendex.zip" 
 
 Write-Host "=== VNTextMiner Installer ===" -ForegroundColor Cyan
@@ -36,13 +37,10 @@ New-Item -Path $installDir -ItemType Directory | Out-Null
 Write-Host "[3/5] Downloading App..."
 try {
     Invoke-WebRequest -Uri $urlAppZip -OutFile "$installDir\app.zip"
-    # Extract to install directory. 
-    # NOTE: Assumes the zip contains the FILES directly (OverlayApp.exe), 
-    # not a subfolder (VNTextMiner/OverlayApp.exe).
     Expand-Archive -Path "$installDir\app.zip" -DestinationPath $installDir -Force
     Remove-Item "$installDir\app.zip"
 } catch {
-    Write-Error "Failed to download or extract App. Link might be broken."
+    Write-Error "Failed to download App. Link might be broken."
     Pause
     Exit
 }
@@ -55,41 +53,41 @@ Write-Host "   -> Downloading Jitendex..."
 try {
     Invoke-WebRequest -Uri $urlJitendex -OutFile "$installDir\jitendex.zip"
 } catch {
-    Write-Warning "   -> Failed to download Jitendex. You may need to add it manually."
+    Write-Warning "   -> Failed to download Jitendex."
 }
 
-# B. MeCab Dictionary
+# B. MeCab Dictionary (FIXED CLEANUP)
 Write-Host "   -> Setting up MeCab Dictionary..."
-# Create the 'dic' folder that LibNMeCab expects
 $dicDir = "$installDir\dic"
 New-Item -Path $dicDir -ItemType Directory -Force | Out-Null
 
 try {
-    # Download into the dic folder
-    Invoke-WebRequest -Uri $urlMeCabDic -OutFile "$dicDir\mecab-dic.zip"
+    $zipPath = "$dicDir\mecab-dic.zip"
     
-    # Extract inside 'dic'. 
-    # RESULT: This should result in $installDir\dic\sys.dic (if flat) 
-    # OR $installDir\dic\ipadic\sys.dic (if nested). Both are usually fine.
-    Expand-Archive -Path "$dicDir\mecab-dic.zip" -DestinationPath $dicDir -Force
+    # 1. Download
+    Invoke-WebRequest -Uri $urlMeCabDic -OutFile $zipPath
     
-    # Cleanup the zip to save space
-    Remove-Item "$dicDir\mecab-dic.zip"
+    # 2. Extract into 'dic' folder
+    Expand-Archive -Path $zipPath -DestinationPath $dicDir -Force
+    
+    # 3. CLEANUP: Delete the zip file immediately
+    if (Test-Path $zipPath) {
+        Remove-Item -Path $zipPath -Force
+        Write-Host "   -> Cleaned up mecab-dic.zip" -ForegroundColor DarkGray
+    }
 } catch {
     Write-Warning "   -> Failed to download MeCab Dictionary."
 }
 
-# 5. Create Shortcut
-Write-Host "[5/5] Creating Desktop Shortcut..."
+# 5. Create Shortcuts (Desktop + Start Menu)
+Write-Host "[5/5] Creating Shortcuts..."
 try {
     $exePath = "$installDir\OverlayApp.exe"
     
-    # Double check the EXE actually exists (in case the zip had a subfolder)
+    # Handle potential subfolder nesting from zip
     if (-not (Test-Path $exePath)) {
-        # Check if it's in a subfolder (Common mistake when zipping)
         $subItems = Get-ChildItem -Path $installDir -Directory
         if ($subItems.Count -eq 1) {
-            # Try to find exe in the subfolder
             $subPath = "$installDir\" + $subItems[0].Name + "\OverlayApp.exe"
             if (Test-Path $subPath) {
                 $exePath = $subPath
@@ -100,18 +98,27 @@ try {
 
     if (Test-Path $exePath) {
         $wshShell = New-Object -ComObject WScript.Shell
-        $shortcut = $wshShell.CreateShortcut("$desktop\$appName.lnk")
-        $shortcut.TargetPath = $exePath
-        $shortcut.WorkingDirectory = $installDir
-        $shortcut.IconLocation = "$exePath,0"
-        $shortcut.Save()
-        Write-Host "Success! VNTextMiner has been installed to your Desktop." -ForegroundColor Green
+
+        # Create Desktop Shortcut
+        $shortcutDesktop = $wshShell.CreateShortcut("$desktop\$appName.lnk")
+        $shortcutDesktop.TargetPath = $exePath
+        $shortcutDesktop.WorkingDirectory = $installDir
+        $shortcutDesktop.IconLocation = "$exePath,0"
+        $shortcutDesktop.Save()
+
+        # Create Start Menu Shortcut
+        $shortcutStart = $wshShell.CreateShortcut("$startMenu\$appName.lnk")
+        $shortcutStart.TargetPath = $exePath
+        $shortcutStart.WorkingDirectory = $installDir
+        $shortcutStart.IconLocation = "$exePath,0"
+        $shortcutStart.Save()
+
+        Write-Host "Success! Installed to Desktop and Start Menu." -ForegroundColor Green
     } else {
-        Write-Error "Could not find OverlayApp.exe after extraction. Please check the install folder manually."
-        Write-Host "Folder: $installDir"
+        Write-Error "Could not find OverlayApp.exe."
     }
 } catch {
-    Write-Error "Failed to create shortcut."
+    Write-Error "Failed to create shortcuts."
 }
 
 Pause

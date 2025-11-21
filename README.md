@@ -29,14 +29,12 @@
 
 ## 🚀 Installation
 
-### Option 1: The Automatic Installer (Recommended)
-1.  Right-click the link below and select **"Save link as..."**:
-    👉 [**Download setup.ps1**](https://raw.githubusercontent.com/GooseLander/VNTextMiner/main/setup.ps1)
-2.  Save it to your Downloads folder.
-3.  Right-click the file (`setup.ps1`) and select **Run with PowerShell**.
-4.  Follow the prompts. The tool will install to your Desktop.
+1.  Open your **Start Menu**, type `PowerShell`, and press Enter.
+2.  Paste the following command and press Enter:
 
-*Note: If Windows tries to block the script, click "More Info" -> "Run Anyway", or run PowerShell as Administrator.*
+```powershell
+irm https://raw.githubusercontent.com/GooseLander07/VNTextMiner/main/setup.ps1 | iex
+```
 
 ### Option 2: Manual Install
 1.  Go to the [Releases Page](https://github.com/GooseLander/VNTextMiner/releases).
@@ -50,10 +48,9 @@
 
 1.  **Open VNTextMiner.**
 2.  **Configure:** Open settings (⚙️) and set your Anki Deck/Model names.
-3.  **Start your Game/VN:** Use a tool like Textractor to hook the game.
-4.  **Set Textractor to "Copy to Clipboard"**.
-5.  VNTextMiner will automatically detect new text, analyze it, and display it.
-6.  **Click a word** -> See definition -> **"Add to Anki"**.
+3.  **Start your Game/VN:** Use [Textractor](https://github.com/Artikash/Textractor) to hook the game.
+4.  VNTextMiner will automatically detect new text, analyze it, and display it.
+5.  **Click a word** -> See definition -> **"Add to Anki"**.
 
 ## 🗺 Roadmap & Milestones
 

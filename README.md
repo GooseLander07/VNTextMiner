@@ -26,6 +26,7 @@
 
 1.  **[Anki](https://apps.ankiweb.net/):** With the **[AnkiConnect](https://ankiweb.net/shared/info/2055492159)** add-on installed.
 2.  **.NET 8.0 Desktop Runtime:** [Download Here](https://dotnet.microsoft.com/download/dotnet/8.0).
+3.  **Textractor:** [Necessary for game hooking](https://github.com/Artikash/Textractor)
 
 ## 🚀 Installation
 
@@ -56,11 +57,17 @@ irm https://raw.githubusercontent.com/GooseLander07/VNTextMiner/main/setup.ps1 |
 
 We are actively working to improve VNTextMiner. PRs are welcome!
 
+- [ ] **📸 Auto-Screenshot:** Capture game context automatically on mine.
+- [ ] **🎙️ Audio Replay:** Record the last 10s of game audio for Anki cards.
+- [ ] **🧠 Smart Anki:** Visual indicators for words you already know.
 - [ ] **Settings Persistence:** Save window position, opacity, and deck names between sessions.
 - [ ] **Theme Support:** Dark/Light mode and custom CSS for the popup.
 - [ ] **Audio Mining:** Support for capturing system audio when mining a card.
 - [ ] **Multiple Dictionaries:** Support for JMdict, Kanjidic, and EPWING imports.
 - [ ] **Auto-Updater:** Built-in check for new releases.
+- [ ] **Add desktop icon:** So it doesn't look weird
+- [ ] **fix the scroll-bar:** So the mouse doesn't need to be on the slider in order to move up or down
+- [ ] **Add more Anki customization features**
 
 ## 🤝 Contributing
 

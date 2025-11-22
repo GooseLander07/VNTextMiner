@@ -11,9 +11,9 @@ $desktop = [Environment]::GetFolderPath("Desktop")
 $startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 
 # --- CONFIGURATION URLS ---
-$urlAppZip   = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/VNTextMiner_v1.0.zip"
-$urlMeCabDic = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/NMeCab-dic.zip" 
-$urlJitendex = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.0.0/jitendex.zip" 
+$urlAppZip   = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.1.0/VNTextMiner_v1.1.0.zip"
+$urlMeCabDic = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.1.0/NMeCab-dic.zip" 
+$urlJitendex = "https://github.com/GooseLander07/VNTextMiner/releases/download/v1.1.0/jitendex.zip" 
 
 Write-Host "=== VNTextMiner Installer ===" -ForegroundColor Cyan
 

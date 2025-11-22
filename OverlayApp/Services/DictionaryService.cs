@@ -7,82 +7,86 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace OverlayApp.Services
 {
     public class DictionaryService
     {
         private const string DB_NAME = "dict.db";
+        // Bumped to 12 to force re-indexing
+        private const int DB_VERSION = 12;
         public bool IsLoaded { get; private set; } = false;
         public event Action<string>? StatusUpdate;
 
         public async Task InitializeAsync(string zipPath)
         {
-            // 1. CHECK FOR OLD DATABASE FORMAT & NUKE IT IF NECESSARY
             if (File.Exists(DB_NAME))
             {
                 if (await IsDatabaseOutdated())
                 {
-                    StatusUpdate?.Invoke("Updating database structure...");
-                    SqliteConnection.ClearAllPools(); // Release file lock
+                    StatusUpdate?.Invoke("Updating dictionary...");
+                    SqliteConnection.ClearAllPools();
                     File.Delete(DB_NAME);
                 }
                 else
                 {
-                    StatusUpdate?.Invoke("Database found. Loading...");
+                    StatusUpdate?.Invoke("Ready.");
                     IsLoaded = true;
                     return;
                 }
             }
 
-            // 2. CREATE NEW DATABASE
-            StatusUpdate?.Invoke("Importing Dictionary (This will take ~1 min)...");
-            if (!File.Exists(zipPath)) throw new FileNotFoundException("jitendex.zip missing");
-
+            StatusUpdate?.Invoke("Creating Database (First time only)...");
             await Task.Run(() =>
             {
-                using (var connection = new SqliteConnection($"Data Source={DB_NAME}"))
+                try
                 {
-                    connection.Open();
-                    using (var cmd = connection.CreateCommand())
+                    using (var connection = new SqliteConnection($"Data Source={DB_NAME}"))
                     {
-                        cmd.CommandText = @"
-                            CREATE TABLE IF NOT EXISTS entries (
-                                term TEXT,
-                                reading TEXT,
-                                score INTEGER,
-                                json_data TEXT
-                            );
-                            CREATE INDEX IF NOT EXISTS idx_term ON entries(term);
-                            CREATE INDEX IF NOT EXISTS idx_reading ON entries(reading);
-                            CREATE INDEX IF NOT EXISTS idx_score ON entries(score);
-                        ";
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    using (var transaction = connection.BeginTransaction())
-                    {
-                        using (FileStream fs = new FileStream(zipPath, FileMode.Open, FileAccess.Read))
-                        using (ZipArchive archive = new ZipArchive(fs, ZipArchiveMode.Read))
+                        connection.Open();
+                        using (var cmd = connection.CreateCommand())
                         {
-                            int count = 0;
-                            foreach (var entry in archive.Entries)
+                            cmd.CommandText = @"
+                                CREATE TABLE IF NOT EXISTS entries (term TEXT, reading TEXT, score INTEGER, json_data TEXT);
+                                CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+                                CREATE INDEX IF NOT EXISTS idx_term ON entries(term);
+                                CREATE INDEX IF NOT EXISTS idx_reading ON entries(reading);
+                                CREATE INDEX IF NOT EXISTS idx_score ON entries(score);
+                            ";
+                            cmd.ExecuteNonQuery();
+                        }
+
+                        using (var transaction = connection.BeginTransaction())
+                        {
+                            using (FileStream fs = new FileStream(zipPath, FileMode.Open, FileAccess.Read))
+                            using (ZipArchive archive = new ZipArchive(fs, ZipArchiveMode.Read))
                             {
-                                if (entry.Name.StartsWith("term_bank") && entry.Name.EndsWith(".json"))
+                                int count = 0;
+                                foreach (var entry in archive.Entries)
                                 {
-                                    ProcessJsonFile(entry, connection, transaction);
-                                    count++;
-                                    StatusUpdate?.Invoke($"Processing bank {count}...");
+                                    if (entry.Name.StartsWith("term_bank") && entry.Name.EndsWith(".json"))
+                                    {
+                                        ProcessJsonFile(entry, connection, transaction);
+                                        count++;
+                                        if (count % 10 == 0) StatusUpdate?.Invoke($"Importing bank {count}...");
+                                    }
                                 }
                             }
+                            var vCmd = connection.CreateCommand();
+                            vCmd.Transaction = transaction;
+                            vCmd.CommandText = "INSERT OR REPLACE INTO meta (key, value) VALUES ('version', $v)";
+                            vCmd.Parameters.AddWithValue("$v", DB_VERSION);
+                            vCmd.ExecuteNonQuery();
+                            transaction.Commit();
                         }
-                        transaction.Commit();
                     }
+                    IsLoaded = true;
                 }
-                IsLoaded = true;
+                catch (Exception ex) { StatusUpdate?.Invoke("Error: " + ex.Message); }
             });
+            StatusUpdate?.Invoke("Ready.");
         }
 
         private async Task<bool> IsDatabaseOutdated()
@@ -93,20 +97,12 @@ namespace OverlayApp.Services
                 {
                     connection.Open();
                     var cmd = connection.CreateCommand();
-                    cmd.CommandText = "SELECT json_data FROM entries LIMIT 1";
+                    cmd.CommandText = "SELECT value FROM meta WHERE key = 'version'";
                     var result = await cmd.ExecuteScalarAsync();
-                    if (result is string s)
-                    {
-                        // If it starts with '[', it's the OLD array format. We want '{' (Object).
-                        if (s.TrimStart().StartsWith("[")) return true;
-                    }
+                    return result == null || (int.TryParse(result.ToString(), out int v) && v < DB_VERSION);
                 }
-                return false;
             }
-            catch
-            {
-                return true; // If error reading, treat as outdated
-            }
+            catch { return true; }
         }
 
         private void ProcessJsonFile(ZipArchiveEntry entry, SqliteConnection conn, SqliteTransaction trans)
@@ -116,105 +112,126 @@ namespace OverlayApp.Services
             using (var jsonReader = new JsonTextReader(reader))
             {
                 var termBank = JArray.Load(jsonReader);
-                var command = conn.CreateCommand();
-                command.Transaction = trans;
-                command.CommandText = "INSERT INTO entries (term, reading, score, json_data) VALUES ($term, $reading, $score, $json)";
-
-                var pTerm = command.CreateParameter(); pTerm.ParameterName = "$term"; command.Parameters.Add(pTerm);
-                var pRead = command.CreateParameter(); pRead.ParameterName = "$reading"; command.Parameters.Add(pRead);
-                var pScore = command.CreateParameter(); pScore.ParameterName = "$score"; command.Parameters.Add(pScore);
-                var pJson = command.CreateParameter(); pJson.ParameterName = "$json"; command.Parameters.Add(pJson);
+                var cmd = conn.CreateCommand();
+                cmd.Transaction = trans;
+                cmd.CommandText = "INSERT INTO entries (term, reading, score, json_data) VALUES ($t, $r, $s, $j)";
+                var pTerm = cmd.CreateParameter(); pTerm.ParameterName = "$t"; cmd.Parameters.Add(pTerm);
+                var pRead = cmd.CreateParameter(); pRead.ParameterName = "$r"; cmd.Parameters.Add(pRead);
+                var pScore = cmd.CreateParameter(); pScore.ParameterName = "$s"; cmd.Parameters.Add(pScore);
+                var pJson = cmd.CreateParameter(); pJson.ParameterName = "$j"; cmd.Parameters.Add(pJson);
 
                 foreach (var item in termBank)
                 {
                     if (item is not JArray arr || arr.Count < 6) continue;
-
                     pTerm.Value = arr[0].ToString();
                     pRead.Value = arr[1].ToString();
-
-                    int score = 0;
-                    int.TryParse(arr[4].ToString(), out score);
+                    int.TryParse(arr[4].ToString(), out int score);
                     pScore.Value = score;
 
-                    var senses = new List<Sense>();
-                    var mainTags = arr[2].ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-
-                    if (arr[5] is JArray defArray)
-                    {
-                        foreach (var d in defArray)
-                        {
-                            var sense = ParseSense(d, mainTags);
-                            senses.Add(sense);
-                        }
-                    }
-
-                    // Store wrapper object
-                    var storageObj = new
-                    {
-                        tags = mainTags,
-                        defs = arr[5],
-                        senses = senses
-                    };
-
+                    var storageObj = new { raw = arr[5], tags = arr[2] };
                     pJson.Value = JsonConvert.SerializeObject(storageObj);
-                    command.ExecuteNonQuery();
+                    cmd.ExecuteNonQuery();
                 }
             }
         }
 
-        private Sense ParseSense(JToken token, List<string> defaultTags)
+        public List<DictionaryEntry> Lookup(string word)
         {
-            var sense = new Sense();
-            sense.PoSTags.AddRange(defaultTags);
+            var list = new List<DictionaryEntry>();
+            if (!IsLoaded) return list;
 
-            if (token.Type == JTokenType.String) sense.Glossaries.Add(token.ToString());
-            else if (token is JObject obj) ParseComplexNode(obj, sense);
-            return sense;
+            using (var conn = new SqliteConnection($"Data Source={DB_NAME}"))
+            {
+                conn.Open();
+                var cmd = conn.CreateCommand();
+                // Indices make this query instant
+                cmd.CommandText = "SELECT term, reading, json_data FROM entries WHERE term=$w OR reading=$w ORDER BY score DESC LIMIT 5";
+                cmd.Parameters.AddWithValue("$w", word);
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        var e = new DictionaryEntry { Headword = r.GetString(0), Reading = r.GetString(1) };
+                        try
+                        {
+                            var json = JObject.Parse(r.GetString(2));
+                            e.RawDefinition = json["raw"];
+                            e.Tags = json["tags"]?.ToObject<List<string>>() ?? new List<string>();
+                        }
+                        catch { }
+                        list.Add(e);
+                    }
+                }
+            }
+            return list;
         }
 
-        private void ParseComplexNode(JToken token, Sense sense)
+        public List<Sense> ExtractSenses(JToken? rawToken)
         {
-            if (token is JArray arr)
-            {
-                foreach (var child in arr) ParseComplexNode(child, sense);
-                return;
-            }
-            if (token is not JObject obj) return;
+            var senses = new List<Sense>();
+            if (rawToken == null) return senses;
+            Walk(rawToken, senses);
+            return senses;
+        }
 
-            string tag = obj["tag"]?.ToString() ?? "";
-            var data = obj["data"];
-            var content = obj["content"];
+        private void Walk(JToken t, List<Sense> senses)
+        {
+            if (t is JArray arr) { foreach (var c in arr) Walk(c, senses); return; }
+            if (t is not JObject obj) return;
 
-            if (tag == "span" && (data?["tag"] != null || data?["type"]?.ToString() == "word-class"))
+            string type = obj["data"]?["content"]?.ToString() ?? "";
+
+            if (type == "sense-group")
             {
-                string t = GetPlainString(content);
-                if (!string.IsNullOrWhiteSpace(t) && !sense.PoSTags.Contains(t)) sense.PoSTags.Add(t);
-            }
-            else if (tag == "div" && data?["type"]?.ToString() == "example")
-            {
-                string rawEx = GetPlainString(content);
-                var ex = new ExampleSentence { Japanese = rawEx };
-                int slashIdx = rawEx.LastIndexOf(" / ");
-                if (slashIdx > 0)
+                var newSense = new Sense();
+                if (obj["content"] is JArray children)
                 {
-                    ex.Japanese = rawEx.Substring(0, slashIdx).Trim();
-                    ex.English = rawEx.Substring(slashIdx + 3).Trim();
+                    foreach (var c in children)
+                    {
+                        if (c is JObject cObj && cObj["data"]?["content"]?.ToString() == "part-of-speech-info")
+                            newSense.PoSTags.Add(GetPlainString(cObj["content"]));
+                    }
                 }
-                sense.Examples.Add(ex);
+                senses.Add(newSense);
+                Walk(obj["content"], senses);
             }
-            else if (tag == "div" && data?["content"]?.ToString() == "notes")
+            else if (type == "glossary")
             {
-                string info = GetPlainString(content);
-                if (!string.IsNullOrWhiteSpace(info)) sense.Info.Add(info);
-            }
-            else if (content != null)
-            {
-                if (content.Type == JTokenType.String) sense.Glossaries.Add(content.ToString());
-                else if (content is JArray)
+                if (senses.Count == 0) senses.Add(new Sense());
+                var target = senses.Last();
+
+                if (obj["content"] is JArray items)
                 {
-                    string s = GetPlainString(content);
-                    if (!string.IsNullOrWhiteSpace(s)) sense.Glossaries.Add(s);
+                    foreach (var item in items)
+                    {
+                        var def = GetPlainString(item);
+                        if (!string.IsNullOrWhiteSpace(def)) target.Glossaries.Add(def);
+                    }
                 }
+                else
+                {
+                    var def = GetPlainString(obj["content"]);
+                    if (!string.IsNullOrWhiteSpace(def)) target.Glossaries.Add(def);
+                }
+            }
+            else if (type == "example-sentence")
+            {
+                if (senses.Count == 0) senses.Add(new Sense());
+                var ex = new ExampleSentence();
+                if (obj["content"] is JArray parts)
+                {
+                    foreach (var p in parts)
+                    {
+                        string pt = p["data"]?["content"]?.ToString() ?? "";
+                        if (pt == "example-sentence-a") ex.Japanese = GetPlainString(p);
+                        if (pt == "example-sentence-b") ex.English = GetPlainString(p);
+                    }
+                }
+                if (!string.IsNullOrWhiteSpace(ex.Japanese)) senses.Last().Examples.Add(ex);
+            }
+            else if (obj["content"] != null)
+            {
+                Walk(obj["content"], senses);
             }
         }
 
@@ -222,60 +239,13 @@ namespace OverlayApp.Services
         {
             if (token == null) return "";
             if (token.Type == JTokenType.String) return token.ToString();
-            if (token is JArray arr)
+            if (token is JArray arr) return string.Join("", arr.Select(GetPlainString));
+            if (token is JObject obj)
             {
-                StringBuilder sb = new StringBuilder();
-                foreach (var c in arr) sb.Append(GetPlainString(c));
-                return sb.ToString();
+                if (obj["tag"]?.ToString() == "rt") return "";
+                return GetPlainString(obj["content"]);
             }
-            if (token is JObject obj && obj["content"] != null) return GetPlainString(obj["content"]);
             return "";
-        }
-
-        public List<DictionaryEntry> Lookup(string word)
-        {
-            var results = new List<DictionaryEntry>();
-            if (!IsLoaded || string.IsNullOrEmpty(word)) return results;
-
-            using (var connection = new SqliteConnection($"Data Source={DB_NAME}"))
-            {
-                connection.Open();
-                var command = connection.CreateCommand();
-                command.CommandText = "SELECT term, reading, score, json_data FROM entries WHERE term = $w OR reading = $w ORDER BY score DESC LIMIT 10";
-                command.Parameters.AddWithValue("$w", word);
-
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        var entry = new DictionaryEntry
-                        {
-                            Headword = reader.GetString(0),
-                            Reading = reader.GetString(1),
-                            Score = reader.GetInt32(2)
-                        };
-
-                        try
-                        {
-                            string jsonStr = reader.GetString(3);
-                            var jsonObj = JObject.Parse(jsonStr);
-
-                            if (jsonObj["senses"] is JToken sensesToken)
-                            {
-                                entry.Senses = sensesToken.ToObject<List<Sense>>() ?? new List<Sense>();
-                            }
-
-                            var tags = jsonObj["tags"]?.ToObject<List<string>>();
-                            var defs = jsonObj["defs"];
-                            entry.DefinitionDocument = JitendexParser.ParseToFlowDocument(defs, tags);
-                        }
-                        catch { }
-
-                        results.Add(entry);
-                    }
-                }
-            }
-            return results;
         }
     }
 }

@@ -10,15 +10,23 @@ namespace OverlayApp.Services
 {
     public static class JitendexParser
     {
-        // CRITICAL FIX: Use direct Colors instead of Converter to prevent TypeInitializationException
-        private static readonly Brush ColorPos = new SolidColorBrush(Color.FromRgb(86, 86, 86));   // #565656
-        private static readonly Brush ColorMisc = Brushes.Brown;
-        private static readonly Brush ColorExampleKey = Brushes.LimeGreen;
-        private static readonly Brush ColorText = Brushes.WhiteSmoke;
-        private static readonly Brush ColorSubText = Brushes.Gray;
+        // Frozen brushes for thread safety
+        private static readonly Brush ColorPos = GetFrozenBrush(Color.FromRgb(86, 86, 86));
+        private static readonly Brush ColorMisc = GetFrozenBrush(Colors.Brown);
+        private static readonly Brush ColorExampleKey = GetFrozenBrush(Colors.LimeGreen);
+        private static readonly Brush ColorText = GetFrozenBrush(Colors.WhiteSmoke);
+
+        private static Brush GetFrozenBrush(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
 
         public static FlowDocument ParseToFlowDocument(JToken? definitionsArray, List<string>? topTags)
         {
+            if (Application.Current == null) return new FlowDocument();
+
             var doc = new FlowDocument
             {
                 PagePadding = new Thickness(0),
@@ -28,7 +36,7 @@ namespace OverlayApp.Services
                 FontSize = 14
             };
 
-            // 1. Add Top Tags
+            // 1. Top Tags (Badges)
             if (topTags != null && topTags.Count > 0)
             {
                 var tagPara = new Paragraph();
@@ -43,13 +51,14 @@ namespace OverlayApp.Services
                 doc.Blocks.Add(tagPara);
             }
 
-            // 2. Process Definitions
+            // 2. Main Content
             if (definitionsArray is JArray arr)
             {
                 foreach (var item in arr)
                 {
                     if (item is JObject obj && obj["type"]?.ToString() == "structured-content")
                     {
+                        // This will now correctly find UL/OL lists inside DIVs
                         var blocks = ParseBlock(obj["content"]);
                         foreach (var b in blocks) doc.Blocks.Add(b);
                     }
@@ -59,7 +68,6 @@ namespace OverlayApp.Services
                     }
                 }
             }
-
             return doc;
         }
 
@@ -91,6 +99,7 @@ namespace OverlayApp.Services
                     foreach (var li in items)
                     {
                         var listItem = new ListItem();
+                        // Recursively parse list items so formatting works inside them
                         var childBlocks = ParseBlock(li);
                         foreach (var b in childBlocks) listItem.Blocks.Add(b);
                         list.ListItems.Add(listItem);
@@ -99,6 +108,7 @@ namespace OverlayApp.Services
                 }
                 else if (tag == "li")
                 {
+                    // Unwrap LI content to find blocks inside
                     blocks.AddRange(ParseBlock(content));
                 }
                 else if (tag == "div")
@@ -111,18 +121,15 @@ namespace OverlayApp.Services
                     }
                     else
                     {
-                        if (HasBlockChildren(content))
-                            blocks.AddRange(ParseBlock(content));
-                        else
-                        {
-                            var p = new Paragraph();
-                            ParseInline(content, p.Inlines);
-                            if (p.Inlines.Count > 0) blocks.Add(p);
-                        }
+                        // --- THE FIX ---
+                        // Instead of forcing a Paragraph (which mashes text),
+                        // we recurse to check if this div contains a List (ul/ol).
+                        blocks.AddRange(ParseBlock(content));
                     }
                 }
                 else
                 {
+                    // Fallback for spans, pure text, or unknown inline tags
                     var p = new Paragraph();
                     ParseInline(token, p.Inlines);
                     if (p.Inlines.Count > 0) blocks.Add(p);
@@ -130,33 +137,25 @@ namespace OverlayApp.Services
             }
             else if (token.Type == JTokenType.String)
             {
+                // Naked text becomes a paragraph
                 blocks.Add(new Paragraph(new Run(token.ToString())));
             }
-
             return blocks;
         }
 
         private static void ParseInline(JToken? token, InlineCollection inlines, Brush? inheritedForeground = null)
         {
             if (token == null) return;
+            if (token is JArray arr) { foreach (var child in arr) ParseInline(child, inlines, inheritedForeground); return; }
 
-            // 1. Handle Arrays (Recursion)
-            if (token is JArray arr)
-            {
-                foreach (var child in arr) ParseInline(child, inlines, inheritedForeground);
-                return;
-            }
-
-            // 2. Handle Strings (Simple Text)
             if (token.Type == JTokenType.String)
             {
-                var run = new Run(token.ToString());
-                if (inheritedForeground != null) run.Foreground = inheritedForeground;
-                inlines.Add(run);
+                var r = new Run(token.ToString());
+                if (inheritedForeground != null) r.Foreground = inheritedForeground;
+                inlines.Add(r);
                 return;
             }
 
-            // 3. Handle Objects (Spans, Ruby, Links)
             if (token is JObject obj)
             {
                 string? tag = obj["tag"]?.ToString();
@@ -166,154 +165,55 @@ namespace OverlayApp.Services
                 if (tag == "span")
                 {
                     string? type = data?["content"]?.ToString();
-
-                    if (type == "part-of-speech-info")
-                        inlines.Add(CreateBadge(GetContentString(content), ColorPos));
-                    else if (type == "misc-info")
-                        inlines.Add(CreateBadge(GetContentString(content), ColorMisc));
+                    if (type == "part-of-speech-info") inlines.Add(CreateBadge(GetContentString(content), ColorPos));
+                    else if (type == "misc-info") inlines.Add(CreateBadge(GetContentString(content), ColorMisc));
                     else if (type == "example-keyword")
                     {
-                        // Keyword detected: Pass the GREEN color down to children
-                        var span = new Span();
-                        ParseInline(content, span.Inlines, ColorExampleKey);
-                        inlines.Add(span);
+                        var s = new Span(); ParseInline(content, s.Inlines, ColorExampleKey); inlines.Add(s);
                     }
                     else
                     {
-                        var span = new Span();
-                        ParseInline(content, span.Inlines, inheritedForeground);
-                        inlines.Add(span);
+                        var s = new Span(); ParseInline(content, s.Inlines, inheritedForeground); inlines.Add(s);
                     }
                 }
                 else if (tag == "ruby")
                 {
-                    // --- FIXED RUBY LOGIC (Pairwise Parsing) ---
                     if (content is JArray parts)
                     {
-                        // We use a Span to hold multiple InlineUIContainers side-by-side
-                        var containerSpan = new Span();
-
+                        var span = new Span();
                         for (int i = 0; i < parts.Count; i++)
                         {
-                            var currentItem = parts[i];
-
-                            // Check if this item is a Reading Tag (RT)
-                            // If it is, we skip it because it should have been handled by the previous Base item.
-                            // However, if we find a stray RT, we ignore it to prevent crashes.
-                            if (IsRubyTag(currentItem)) continue;
-
-                            // Get the Base Text (Kanji)
-                            // It might be a simple string or a nested object (like a span)
-                            // We need to extract the raw text for the display
-                            string baseText = GetContentString(currentItem);
-
-                            // LOOK AHEAD: Is the NEXT item a Reading (RT)?
+                            var item = parts[i];
+                            if (IsRubyTag(item)) continue;
+                            string baseText = GetContentString(item);
                             string rtText = "";
-                            if (i + 1 < parts.Count && IsRubyTag(parts[i + 1]))
-                            {
-                                rtText = GetContentString(parts[i + 1]["content"]);
-                            }
+                            if (i + 1 < parts.Count && IsRubyTag(parts[i + 1])) rtText = GetContentString(parts[i + 1]["content"]);
 
-                            // Create the Vertical Stack
-                            var stack = new StackPanel
-                            {
-                                Orientation = Orientation.Vertical,
-                                VerticalAlignment = VerticalAlignment.Bottom,
-                                Margin = new Thickness(0, 0, 0, 3)
-                            };
-
-                            // Top: Furigana (Reading)
-                            if (!string.IsNullOrEmpty(rtText))
-                            {
-                                stack.Children.Add(new TextBlock
-                                {
-                                    Text = rtText,
-                                    FontSize = 9,
-                                    Foreground = inheritedForeground ?? Brushes.Gray, // Inherit Green if keyword
-                                    HorizontalAlignment = HorizontalAlignment.Center,
-                                    TextAlignment = TextAlignment.Center,
-                                    Margin = new Thickness(0, 0, 0, -2) // Pull closer to Kanji
-                                });
-                            }
-
-                            // Bottom: Kanji (Base)
-                            stack.Children.Add(new TextBlock
-                            {
-                                Text = baseText,
-                                FontSize = 14,
-                                Foreground = inheritedForeground ?? ColorText,
-                                HorizontalAlignment = HorizontalAlignment.Center,
-                                TextAlignment = TextAlignment.Center
-                            });
-
-                            containerSpan.Inlines.Add(new InlineUIContainer(stack) { BaselineAlignment = BaselineAlignment.Bottom });
+                            var stack = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 3) };
+                            if (!string.IsNullOrEmpty(rtText)) stack.Children.Add(new TextBlock { Text = rtText, FontSize = 9, Foreground = Brushes.Gray, HorizontalAlignment = HorizontalAlignment.Center });
+                            stack.Children.Add(new TextBlock { Text = baseText, FontSize = 14, Foreground = inheritedForeground ?? ColorText, HorizontalAlignment = HorizontalAlignment.Center });
+                            span.Inlines.Add(new InlineUIContainer(stack) { BaselineAlignment = BaselineAlignment.Bottom });
                         }
-
-                        inlines.Add(containerSpan);
+                        inlines.Add(span);
                     }
                 }
                 else if (tag == "a")
                 {
-                    var link = new Span();
-                    link.Foreground = new SolidColorBrush(Color.FromRgb(100, 181, 246));
-                    ParseInline(content, link.Inlines, link.Foreground);
-                    inlines.Add(link);
+                    var link = new Span(); link.Foreground = GetFrozenBrush(Color.FromRgb(100, 181, 246));
+                    ParseInline(content, link.Inlines, link.Foreground); inlines.Add(link);
                 }
-                else
-                {
-                    ParseInline(content, inlines, inheritedForeground);
-                }
+                else ParseInline(content, inlines, inheritedForeground);
             }
         }
 
-        // Helper to check if a JSON token is an RT tag
-        private static bool IsRubyTag(JToken? token)
-        {
-            if (token is JObject o && o["tag"]?.ToString() == "rt") return true;
-            return false;
-        }
+        private static bool IsRubyTag(JToken? t) => t is JObject o && o["tag"]?.ToString() == "rt";
+        private static string GetContentString(JToken? t) => t?.ToString() ?? "";
 
         private static InlineUIContainer CreateBadge(string text, Brush bg)
         {
-            if (string.IsNullOrEmpty(text)) text = "?";
-            var border = new Border
-            {
-                Background = bg,
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(4, 1, 4, 1),
-                Margin = new Thickness(0, 0, 4, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            border.Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeights.Bold };
-            return new InlineUIContainer(border) { BaselineAlignment = BaselineAlignment.Center };
-        }
-
-        private static string GetContentString(JToken? token)
-        {
-            if (token == null) return "";
-            if (token.Type == JTokenType.String) return token.ToString();
-            if (token is JArray arr)
-            {
-                string s = "";
-                foreach (var c in arr) s += GetContentString(c);
-                return s;
-            }
-            if (token is JObject obj) return GetContentString(obj["content"]);
-            return "";
-        }
-
-        private static bool HasBlockChildren(JToken? token)
-        {
-            if (token is JArray arr)
-            {
-                foreach (var t in arr) if (HasBlockChildren(t)) return true;
-            }
-            if (token is JObject obj)
-            {
-                string? tag = obj["tag"]?.ToString();
-                return tag == "ul" || tag == "ol" || tag == "div" || tag == "li";
-            }
-            return false;
+            var b = new Border { Background = bg, CornerRadius = new CornerRadius(3), Padding = new Thickness(4, 1, 4, 1), Margin = new Thickness(0, 0, 4, 0) };
+            b.Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeights.Bold };
+            return new InlineUIContainer(b) { BaselineAlignment = BaselineAlignment.Center };
         }
     }
 }

@@ -1,28 +1,40 @@
 ﻿using System.Collections.Generic;
-using System.Windows.Documents;
-using System.Windows.Media;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Windows.Documents; // FlowDocument
+using Newtonsoft.Json.Linq;
 
 namespace OverlayApp.Models
 {
-    public class DictionaryEntry
+    public class DictionaryEntry : INotifyPropertyChanged
     {
         public string Headword { get; set; } = "";
         public string Reading { get; set; } = "";
         public int Score { get; set; } = 0;
         public bool IsPriority => Score >= 1000;
 
-        public FlowDocument DefinitionDocument { get; set; } = CreateEmptyDoc();
+        private FlowDocument? _definitionDocument;
+        public FlowDocument? DefinitionDocument
+        {
+            get => _definitionDocument;
+            set { _definitionDocument = value; OnPropertyChanged(); }
+        }
 
+        private bool _isKnown = false;
+        public bool IsKnown
+        {
+            get => _isKnown;
+            set { _isKnown = value; OnPropertyChanged(); }
+        }
+
+        public JToken? RawDefinition { get; set; }
         public List<string> Tags { get; set; } = new List<string>();
         public List<Sense> Senses { get; set; } = new List<Sense>();
 
-        private static FlowDocument CreateEmptyDoc()
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
-            return new FlowDocument(new Paragraph(new Run("Loading...")))
-            {
-                PagePadding = new System.Windows.Thickness(0),
-                Background = Brushes.Transparent
-            };
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
     }
 

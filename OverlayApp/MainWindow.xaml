@@ -12,7 +12,6 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <!-- Simple style for the scrollbar to blend in -->
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="#252526"/>
         </Style>
@@ -66,78 +65,156 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Settings Panel (Overlay) -->
+        <!-- Settings Panel -->
         <Border x:Name="SettingsPanel" Grid.Row="1" Background="#252526" Padding="10" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,0,5,0" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="0,0,5,5">
-            <StackPanel Width="200">
-                <TextBlock Text="Settings" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="600">
+                <StackPanel Width="280">
+                    <Grid Margin="0,0,0,10">
+                        <TextBlock Text="Settings" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                        <Button Content="🔄 Refresh Lists" Click="RefreshLists_Click" HorizontalAlignment="Right" Background="#333" Foreground="White" BorderThickness="0" Padding="5,2" FontSize="10" Cursor="Hand"/>
+                    </Grid>
 
-                <CheckBox x:Name="ChkPause" Content="Pause Clipboard Monitor" Foreground="White" Margin="0,0,0,10" Checked="ChkPause_Checked" Unchecked="ChkPause_Checked"/>
+                    <CheckBox x:Name="ChkPause" Content="Pause Monitoring" Foreground="White" Margin="0,0,0,10" Checked="ChkPause_Checked" Unchecked="ChkPause_Checked"/>
 
-                <TextBlock Text="Anki Deck Name:" Foreground="Gray"/>
-                <TextBox x:Name="TxtDeck" Text="Japanese::VN" Background="#333" Foreground="White" BorderThickness="0" Padding="3" Margin="0,0,0,10"/>
+                    <!-- NEW: Window Selection -->
+                    <TextBlock Text="Target Game (for Screenshot):" Foreground="Gray"/>
+                    <ComboBox x:Name="CmbWindows" Margin="0,0,0,10" DisplayMemberPath="Title" SelectionChanged="CmbWindows_SelectionChanged"/>
 
-                <!-- Transparency Slider -->
-                <TextBlock Text="Background Opacity:" Foreground="Gray" Margin="0,5,0,0"/>
-                <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="30"/>
-                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Anki Deck:" Foreground="Gray"/>
+                    <ComboBox x:Name="CmbDecks" IsEditable="True" SelectionChanged="CmbDecks_SelectionChanged" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="Note Type:" Foreground="Gray"/>
+                    <ComboBox x:Name="CmbModels" IsEditable="True" SelectionChanged="CmbModels_SelectionChanged" Margin="0,0,0,10"/>
+
+                    <!-- Mappings -->
+                    <Border Background="#333" CornerRadius="5" Padding="5" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="Field Mappings:" Foreground="#61AFEF" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <ItemsControl x:Name="FieldMappingControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="110"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding FieldName}" Foreground="White" VerticalAlignment="Center" ToolTip="{Binding FieldName}" TextTrimming="CharacterEllipsis"/>
+                                            <ComboBox Grid.Column="1" SelectedItem="{Binding SelectedToken}" SelectionChanged="MappingCombo_SelectionChanged"
+                                                      ItemsSource="{Binding AvailableTokens}" Height="22" FontSize="11"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Background Opacity:" Foreground="Gray" Margin="0,5,0,0"/>
                     <Slider x:Name="OpacitySlider" Minimum="0.1" Maximum="1.0" Value="0.8" 
                             TickFrequency="0.1" IsSnapToTickEnabled="True"
-                            ValueChanged="OpacitySlider_ValueChanged"/>
-                    <TextBlock Text="{Binding ElementName=OpacitySlider, Path=Value, StringFormat=N1}" 
-                               Grid.Column="1" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                </Grid>
+                            ValueChanged="OpacitySlider_ValueChanged" Margin="0,0,0,10"/>
 
-                <Button Content="Test Anki Connection" Click="TestAnki_Click" Background="#333" Foreground="White" BorderThickness="0" Padding="5"/>
-                <TextBlock x:Name="AnkiStatus" Margin="5,5,0,0" HorizontalAlignment="Center" FontSize="10"/>
-            </StackPanel>
+                    <Button Content="Test Anki Connection" Click="TestAnki_Click" Background="#333" Foreground="White" BorderThickness="0" Padding="5"/>
+                    <TextBlock x:Name="AnkiStatus" Margin="5,5,0,0" HorizontalAlignment="Center" FontSize="10"/>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
 
         <!-- Dictionary Popup -->
         <Popup x:Name="DictPopup" Placement="MousePoint" StaysOpen="False" AllowsTransparency="True">
-            <Border Background="#1E1E1E" BorderBrush="#333" BorderThickness="1" CornerRadius="5" MaxWidth="500" MaxHeight="400">
+            <Border Background="#1E1E1E" BorderBrush="#333" BorderThickness="1" CornerRadius="5" MaxWidth="500" MaxHeight="400"
+                    PreviewMouseWheel="Popup_PreviewMouseWheel">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="10" ShadowDepth="3" Opacity="0.5"/>
                 </Border.Effect>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
 
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="350">
-                        <ItemsControl x:Name="PopEntries" AlternationCount="2">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Padding="10" BorderBrush="#333" BorderThickness="0,0,0,1">
-                                        <StackPanel>
-                                            <!-- Header -->
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                                <TextBlock Text="{Binding Headword}" Foreground="#61AFEF" FontSize="24" FontWeight="Bold" Margin="0,0,10,0"/>
-                                                <TextBlock Text="{Binding Reading}" Foreground="#98C379" FontSize="18" VerticalAlignment="Bottom"/>
-                                            </StackPanel>
+                <!-- Scroll Viewer for List -->
+                <ScrollViewer x:Name="DictScrollViewer" 
+              VerticalScrollBarVisibility="Auto" 
+              HorizontalScrollBarVisibility="Disabled"
+              PanningMode="VerticalOnly"
+              CanContentScroll="False"
+              PreviewMouseWheel="Popup_PreviewMouseWheel"
+              Height="280"
+              Margin="0,10,0,0">
 
-                                            <!-- Definition (FlowDocument) -->
-                                            <FlowDocumentScrollViewer Document="{Binding DefinitionDocument}" 
-                                                                      VerticalScrollBarVisibility="Disabled" 
-                                                                      IsToolBarVisible="False"
-                                                                      Background="Transparent"
-                                                                      Margin="-5,0,0,0" />
+                    <!-- Custom Scrollbar Style -->
+                    <ScrollViewer.Resources>
+                        <Style TargetType="ScrollBar">
+                            <Setter Property="Background" Value="#333"/>
+                            <Setter Property="Width" Value="12"/>
+                            <!-- Wider scrollbar -->
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ScrollBar">
+                                        <Grid x:Name="GridRoot" Width="12" Background="#222">
+                                            <Track x:Name="PART_Track" IsDirectionReversed="true" Focusable="false">
+                                                <Track.Thumb>
+                                                    <Thumb>
+                                                        <Thumb.Template>
+                                                            <ControlTemplate TargetType="Thumb">
+                                                                <Border Background="#666" CornerRadius="4" Margin="2"/>
+                                                            </ControlTemplate>
+                                                        </Thumb.Template>
+                                                    </Thumb>
+                                                </Track.Thumb>
+                                            </Track>
+                                        </Grid>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ScrollViewer.Resources>
+
+                    <!-- Content -->
+                    <ItemsControl x:Name="PopEntries">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#2b2b2b" CornerRadius="8" Margin="0,0,5,10" Padding="15" BorderBrush="#444" BorderThickness="1">
+                                    <StackPanel>
+                                        <!-- Header: Word + Reading -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                            <TextBlock Text="{Binding Headword}" FontSize="24" FontWeight="Bold" Margin="0,0,10,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <!-- Default Color (Blue) -->
+                                                        <Setter Property="Foreground" Value="#61AFEF"/>
+                                                        <Style.Triggers>
+                                                            <!-- If IsKnown == True, Change to Green -->
+                                                            <DataTrigger Binding="{Binding IsKnown}" Value="True">
+                                                                <Setter Property="Foreground" Value="#98C379"/>
+                                                                <!-- Anki Green -->
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Reading}" Foreground="#98C379" FontSize="18" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+
+                                            <!-- Add Button (Top Right) -->
+                                            <Button Content="Add +" 
+                                    Click="AddSpecificEntry_Click" 
+                                    Tag="{Binding}"
+                                    Width="60" Height="25"
+                                    FontSize="12"
+                                    Background="#333" Foreground="#FFF" BorderBrush="#555"
+                                    HorizontalAlignment="Right" Margin="20,0,0,0"
+                                    Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="4"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
                                         </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
 
-                    <Button Grid.Row="1" Click="AddToAnki_Click" 
-                            Background="#43A047" Foreground="White" BorderThickness="0" Padding="10"
-                            FontWeight="Bold" Cursor="Hand">
-                        + Add Current to Anki
-                    </Button>
-                </Grid>
+                                        <!-- Rich Dictionary Content -->
+                                        <RichTextBox IsReadOnly="True" Background="Transparent" BorderThickness="0" Foreground="#DDD" local:RichTextBoxHelper.Document="{Binding DefinitionDocument}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Border>
         </Popup>
 

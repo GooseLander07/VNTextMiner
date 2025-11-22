@@ -9,18 +9,20 @@
 ## ✨ Features
 
 *   **Universal Clipboard Monitoring:** Works with Textractor, Game2Text, OCR, or just simple Copy+Paste.
-*   **Smart Tokenization:** Built-in MeCab analysis to break sentences into words.
+*   **🧠 Smart Anki Integration:**
+    *   **Duplicate Detection:** Dictionary headwords turn **Green** if the word is already in your Anki deck.
+    *   **Context Aware:** Prevents accidental duplicates while allowing heteronyms (same Kanji, different reading).
+*   **📸 Auto-Screenshots:**
+    *   Automatically captures the game window when you mine a card.
+    *   **Smart Compression:** Resizes and compresses images to prevent Anki freezing or database bloat.
 *   **Yomitan-Style Popup:** 
-    *   Rich dictionary entries with pitch accent info.
-    *   **Stacked Furigana:** Proper Ruby text rendering.
-    *   **Color-Coded Tags:** Visual badges for parts of speech and commonality.
-*   **One-Click Anki Mining:** 
-    *   Connects via AnkiConnect.
-    *   Auto-fills: Headword, Reading, Definition, and Context Sentence (with highlighted word).
+    *   **Lazy Loading:** Instant popup rendering with zero lag.
+    *   **Rich Data:** Pitch accent, frequency data, and stacked Furigana.
+    *   **Clean Formatting:** Exports HTML-styled lists and badges to Anki (looks just like Yomitan).
 *   **Overlay Features:**
     *   **Transparency Slider:** Blend the overlay seamlessly into your game.
     *   **Click-Through Toggle:** Hide the UI when reading, show it when mining.
-    *   **Instant Lookup:** Click any word to pop the dictionary.
+    *   **Modern UI:** KonoSuba-inspired aesthetic with dark mode support and custom scrollbars.
 
 ## 🛠 Prerequisites
 
@@ -39,7 +41,7 @@ irm https://raw.githubusercontent.com/GooseLander07/VNTextMiner/main/setup.ps1 |
 
 ### Option 2: Manual Install
 1.  Go to the [Releases Page](https://github.com/GooseLander/VNTextMiner/releases).
-2.  Download `VNTextMiner_App.zip`, `jitendex.zip`, and `mecab-dic.zip`.
+2.  Download `VNTextMiner_v1.1.zip`, `jitendex.zip`, and `mecab-dic.zip`.
 3.  Extract the App to a folder.
 4.  Place `jitendex.zip` next to `OverlayApp.exe`.
 5.  Extract `mecab-dic.zip` into a folder named `dic/` next to the exe.
@@ -51,23 +53,25 @@ irm https://raw.githubusercontent.com/GooseLander07/VNTextMiner/main/setup.ps1 |
 2.  **Configure:** Open settings (⚙️) and set your Anki Deck/Model names.
 3.  **Start your Game/VN:** Use [Textractor](https://github.com/Artikash/Textractor) to hook the game.
 4.  VNTextMiner will automatically detect new text, analyze it, and display it.
-5.  **Click a word** -> See definition -> **"Add to Anki"**.
+5.  **Click a word:**
+    *   If the word turns **Green**, you already know it!
+    *   If not, click **"Add +"** to mine it with screenshot and context.
 
 ## 🗺 Roadmap & Milestones
 
 We are actively working to improve VNTextMiner. PRs are welcome!
 
-- [ ] **📸 Auto-Screenshot:** Capture game context automatically on mine.
+- [x] **📸 Auto-Screenshot:** Capture game context automatically on mine.
+- [x] **🧠 Smart Anki:** Visual indicators for words you already know.
+- [x] **Settings Persistence:** Save window position, opacity, and deck names between sessions.
+- [x] **Theme Support:** Dark/Light mode and custom CSS for the popup.
+- [x] **Performance:** Instant lookups via lazy loading and threading fixes.
+- [x] **UI Polish:** Custom app icon, responsive scrollbars, and clean typography.
 - [ ] **🎙️ Audio Replay:** Record the last 10s of game audio for Anki cards.
-- [ ] **🧠 Smart Anki:** Visual indicators for words you already know.
-- [ ] **Settings Persistence:** Save window position, opacity, and deck names between sessions.
-- [ ] **Theme Support:** Dark/Light mode and custom CSS for the popup.
 - [ ] **Audio Mining:** Support for capturing system audio when mining a card.
 - [ ] **Multiple Dictionaries:** Support for JMdict, Kanjidic, and EPWING imports.
 - [ ] **Auto-Updater:** Built-in check for new releases.
-- [ ] **Add desktop icon:** So it doesn't look weird
-- [ ] **fix the scroll-bar:** So the mouse doesn't need to be on the slider in order to move up or down
-- [ ] **Add more Anki customization features**
+- [ ] **Built-in OCR:** Mine text from games that can't be hooked.
 
 ## 🤝 Contributing
 
@@ -91,3 +95,4 @@ This software utilizes dictionary data from [Jitendex](https://jitendex.org/), w
 
 **MeCab:**
 Includes [MeCab](https://taku910.github.io/mecab/) and [UniDic](https://clrd.ninjal.ac.jp/unidic/) data.
+```

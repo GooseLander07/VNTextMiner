@@ -1,6 +1,8 @@
 # VNTextMiner
 
-**VNTextMiner** is a streamlined, standalone overlay tool for Japanese learners. It monitors your clipboard to analyze Japanese text from **any source** (Visual Novels, Browsers, OCR tools) and provides a modern, Yomitan-style popup interface for "mining" vocabulary directly into Anki.
+Ever get annoyed having to constantly switch between your game and a browser just to look up a word? You're deep in a Visual Novel, you hit a Kanji you don't know. You Alt-Tab out to find it, add it to anki, tab back in, and your immersion is gone.
+
+**VNTextMiner** solves this. It is a streamlined, standalone overlay tool designed specifically for Japanese learners. It sits transparently over your game, monitors your clipboard (via Textractor, Game2Text, or OCR), and provides a modern, **Yomitan-style popup** right on top of the action.
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)

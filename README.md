@@ -1,4 +1,4 @@
-# VNTextMiner
+# VNOverlay
 
 Ever get annoyed having to constantly switch between your game and a browser just to look up a word? You're deep in a Visual Novel, you hit a Kanji you don't know. You Alt-Tab out to find it, add it to anki, tab back in, and your immersion is gone.
 
